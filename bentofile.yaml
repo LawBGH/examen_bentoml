@@ -9,6 +9,7 @@ include:
 
 python:
   packages:
+    - bentoml==1.1.10
     - numpy
     - scikit-learn
     - PyJWT

@@ -3,3 +3,6 @@ numpy
 scikit-learn
 PyJWT
 starlette
+pydantic
+python3-pytest
+pytest

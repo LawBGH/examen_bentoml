@@ -1,18 +1,33 @@
 import bentoml
 from bentoml import Service, Runnable, Runner
-
 from bentoml.io import JSON
-import numpy as np
 
 import jwt
 from datetime import datetime, timedelta
 from starlette.responses import JSONResponse
+from pydantic import BaseModel, Field
 
-# Charger modèles
+# -----------------------------
+# Pydantic input validation
+# -----------------------------
+class PredictInput(BaseModel):
+    GRE_Score: float = Field(..., alias="GRE Score")
+    TOEFL_Score: float = Field(..., alias="TOEFL Score")
+    University_Rating: int = Field(..., alias="University Rating")
+    SOP: float
+    LOR: float
+    CGPA: float
+    Research: int
+
+# -----------------------------
+# Load models
+# -----------------------------
 model = bentoml.sklearn.load_model("linear_regression_model:latest")
 scaler = bentoml.sklearn.load_model("data_scaler:latest")
 
+# -----------------------------
 # JWT config
+# -----------------------------
 JWT_SECRET_KEY = "BentoMLSecretKey"
 JWT_ALGORITHM = "HS256"
 
@@ -25,9 +40,11 @@ def create_jwt_token(user_id: str):
     payload = {"sub": user_id, "exp": expiration}
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
-# Décorateur JWT compatible legacy
+# -----------------------------
+# JWT middleware
+# -----------------------------
 def require_jwt(func):
-    def wrapper(payload, context):
+    def wrapper(input_data, context):
         auth = context.request.headers.get("Authorization")
         if not auth:
             return JSONResponse(status_code=401, content={"detail": "Missing token"})
@@ -38,10 +55,12 @@ def require_jwt(func):
         except Exception:
             return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
 
-        return func(payload)
+        return func(input_data)
     return wrapper
 
+# -----------------------------
 # Runnable
+# -----------------------------
 class AdmissionRunnable(Runnable):
     SUPPORTED_RESOURCES = ("cpu",)
     SUPPORTS_CPU_MULTI_THREADING = True
@@ -55,15 +74,21 @@ class AdmissionRunnable(Runnable):
         scaled = self.scaler.transform(arr)
         return self.model.predict(scaled)
 
-# Runner
 admission_runner = Runner(AdmissionRunnable, name="admission_runner")
 
+# -----------------------------
 # Service
+# -----------------------------
 svc = Service("admission_api", runners=[admission_runner])
 
-# LOGIN endpoint
+# -----------------------------
+# LOGIN
+# -----------------------------
 @svc.api(input=JSON(), output=JSON(), route="/login")
 def login(credentials):
+    if not isinstance(credentials, dict):
+        return JSONResponse(status_code=400, content={"detail": "Invalid JSON"})
+
     username = credentials.get("username")
     password = credentials.get("password")
 
@@ -72,26 +97,32 @@ def login(credentials):
 
     return JSONResponse(status_code=401, content={"detail": "Invalid credentials"})
 
-# PREDICT endpoint (protégé)
-@svc.api(input=JSON(), output=JSON(), route="/predict")
+# -----------------------------
+# PREDICT 
+# -----------------------------
+@svc.api(input=JSON(pydantic_model=PredictInput), output=JSON(), route="/predict")
 @require_jwt
-def predict(payload):
-    features = np.array([[
-        payload["GRE Score"],
-        payload["TOEFL Score"],
-        payload["University Rating"],
-        payload["SOP"],
-        payload["LOR"],
-        payload["CGPA"],
-        payload["Research"]
-    ]])
+def predict(input_data: PredictInput):
+    features = [
+        input_data.GRE_Score,
+        input_data.TOEFL_Score,
+        input_data.University_Rating,
+        input_data.SOP,
+        input_data.LOR,
+        input_data.CGPA,
+        input_data.Research,
+    ]
 
-    prediction = admission_runner.predict.run(features)
+    prediction = admission_runner.predict.run([features])
 
-    value = prediction
-    if hasattr(value, "tolist"):
-        value = value.tolist()
-    while isinstance(value, list):
-        value = value[0]
+    # Résolution du résultat (Future, WorkerResult, ndarray, list…)
+    if hasattr(prediction, "result"):
+        prediction = prediction.result()
 
-    return {"chance_of_admit": float(value)}
+    if hasattr(prediction, "tolist"):
+        prediction = prediction.tolist()
+
+    while isinstance(prediction, list):
+        prediction = prediction[0]
+
+    return {"chance_of_admit": float(prediction)}

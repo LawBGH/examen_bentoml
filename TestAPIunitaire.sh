@@ -1,14 +1,13 @@
 #!/bin/bash
 # Suppose que bento serve fonctionne
-# bentoml serve
-#
-bentoml serve src.service:svc --port 3001
+#  bentoml build
+#  bentoml serve admission_api:latest --port 3001
 
 sleep 5  # Attendre que le serveur démarre
 
 
 echo "=== LOGIN ==="
-TOKEN=$(curl -s -X POST http://localhost:3000/login \
+TOKEN=$(curl -s -X POST http://localhost:3001/login \
   -H "Content-Type: application/json" \
   -d '{"username":"LawrenceBENE","password":"BentoMlTop"}' | jq -r '.token')
 
@@ -20,7 +19,7 @@ if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
 fi
 
 echo "=== PREDICT ==="
-curl -X POST http://localhost:3000/predict \
+curl -X POST http://localhost:3001/predict \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{
