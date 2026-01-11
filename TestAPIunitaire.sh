@@ -1,13 +1,28 @@
 #!/bin/bash
-#touch src/__init__.py
-#source venv/bin/activate
-python3 -c "import src.service; print('OK')"
-#bentoml serve src/service.py
-nohup bentoml serve src/service.py --host 0.0.0.0 --port 3000 > bentoml.log 2>&1 &
-sleep 15
+# Suppose que bento serve fonctionne
+# bentoml serve
+#
+bentoml serve src.service:svc --port 3001
 
+sleep 5  # Attendre que le serveur démarre
+
+
+echo "=== LOGIN ==="
+TOKEN=$(curl -s -X POST http://localhost:3000/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"LawrenceBENE","password":"BentoMlTop"}' | jq -r '.token')
+
+echo "Token reçu : $TOKEN"
+
+if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
+  echo "Erreur : impossible d'obtenir un token"
+  exit 1
+fi
+
+echo "=== PREDICT ==="
 curl -X POST http://localhost:3000/predict \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{
     "GRE Score": 320,
     "TOEFL Score": 110,
@@ -17,6 +32,3 @@ curl -X POST http://localhost:3000/predict \
     "CGPA": 9.2,
     "Research": 1
   }'
-
-# desactive le service bentoML
-sudo lsof -i :3000 | awk 'NR>1 {print $2}' | xargs sudo kill -9

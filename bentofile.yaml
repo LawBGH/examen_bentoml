@@ -1,0 +1,14 @@
+service: "src.service:svc"
+
+labels:
+  owner: "lawrence"
+  project: "admission_api"
+
+include:
+  - "src/service.py"
+
+python:
+  packages:
+    - numpy
+    - scikit-learn
+    - PyJWT
