@@ -1,3 +1,6 @@
+import os
+os.environ["BENTOML_DISABLE_METRICS"] = "true"
+
 import bentoml
 from bentoml import Service, Runnable, Runner
 from bentoml.io import JSON
