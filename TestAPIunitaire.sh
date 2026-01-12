@@ -1,7 +1,7 @@
 #!/bin/bash
 # Suppose que bento serve fonctionne
 #  bentoml build
-#  bentoml serve admission_api:latest --port 3001
+#  bentoml serve src/service.py:svc --reload
 
 sleep 5  # Attendre que le serveur démarre
 

@@ -2,16 +2,44 @@ import os
 os.environ["BENTOML_DISABLE_METRICS"] = "true"
 
 import bentoml
-from bentoml import Service, Runnable, Runner
+from bentoml import Service, Runner, Runnable
 from bentoml.io import JSON
 
 import jwt
 from datetime import datetime, timedelta
-from starlette.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+
 # -----------------------------
-# Pydantic input validation
+# MODELS
+# -----------------------------
+model = bentoml.sklearn.load_model("linear_regression_model:latest")
+scaler = bentoml.sklearn.load_model("data_scaler:latest")
+
+
+# -----------------------------
+# JWT CONFIG
+# -----------------------------
+JWT_SECRET_KEY = "BentoMLSecretKey"
+JWT_ALGORITHM = "HS256"
+
+USERS = {
+    "LawrenceBENE": "BentoMlTop"
+}
+
+def create_jwt_token(user_id: str):
+    payload = {
+        "sub": user_id,
+        "exp": datetime.utcnow() + timedelta(hours=1)
+    }
+    token = jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    if isinstance(token, bytes):
+        token = token.decode("utf-8")
+    return token
+
+
+# -----------------------------
+# INPUT MODEL
 # -----------------------------
 class PredictInput(BaseModel):
     GRE_Score: float = Field(..., alias="GRE Score")
@@ -22,47 +50,9 @@ class PredictInput(BaseModel):
     CGPA: float
     Research: int
 
-# -----------------------------
-# Load models
-# -----------------------------
-model = bentoml.sklearn.load_model("linear_regression_model:latest")
-scaler = bentoml.sklearn.load_model("data_scaler:latest")
 
 # -----------------------------
-# JWT config
-# -----------------------------
-JWT_SECRET_KEY = "BentoMLSecretKey"
-JWT_ALGORITHM = "HS256"
-
-USERS = {
-    "LawrenceBENE": "BentoMlTop",
-}
-
-def create_jwt_token(user_id: str):
-    expiration = datetime.utcnow() + timedelta(hours=1)
-    payload = {"sub": user_id, "exp": expiration}
-    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-
-# -----------------------------
-# JWT middleware
-# -----------------------------
-def require_jwt(func):
-    def wrapper(input_data, context):
-        auth = context.request.headers.get("Authorization")
-        if not auth:
-            return JSONResponse(status_code=401, content={"detail": "Missing token"})
-
-        try:
-            token = auth.split()[1]
-            jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        except Exception:
-            return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
-
-        return func(input_data)
-    return wrapper
-
-# -----------------------------
-# Runnable
+# RUNNABLE
 # -----------------------------
 class AdmissionRunnable(Runnable):
     SUPPORTED_RESOURCES = ("cpu",)
@@ -77,12 +67,15 @@ class AdmissionRunnable(Runnable):
         scaled = self.scaler.transform(arr)
         return self.model.predict(scaled)
 
-admission_runner = Runner(AdmissionRunnable, name="admission_runner")
+
+runner = Runner(AdmissionRunnable, name="admission_runner")
+
 
 # -----------------------------
-# Service
+# SERVICE
 # -----------------------------
-svc = Service("admission_api", runners=[admission_runner])
+svc = Service("admission_api", runners=[runner])
+
 
 # -----------------------------
 # LOGIN
@@ -90,7 +83,7 @@ svc = Service("admission_api", runners=[admission_runner])
 @svc.api(input=JSON(), output=JSON(), route="/login")
 def login(credentials):
     if not isinstance(credentials, dict):
-        return JSONResponse(status_code=400, content={"detail": "Invalid JSON"})
+        return {"detail": "Invalid JSON"}, 400
 
     username = credentials.get("username")
     password = credentials.get("password")
@@ -98,14 +91,25 @@ def login(credentials):
     if username in USERS and USERS[username] == password:
         return {"token": create_jwt_token(username)}
 
-    return JSONResponse(status_code=401, content={"detail": "Invalid credentials"})
+    return {"detail": "Invalid credentials"}, 401
 
-# -----------------------------
 # PREDICT 
 # -----------------------------
 @svc.api(input=JSON(pydantic_model=PredictInput), output=JSON(), route="/predict")
-@require_jwt
-def predict(input_data: PredictInput):
+def predict(input_data, context):
+
+    # Vérification JWT
+    auth = context.request.headers.get("Authorization")
+    if not auth:
+        return {"detail": "Missing token"}, 401
+
+    try:
+        token = auth.split()[1]
+        jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    except Exception:
+        return {"detail": "Invalid or expired token"}, 401
+
+    # Extraction des features
     features = [
         input_data.GRE_Score,
         input_data.TOEFL_Score,
@@ -116,16 +120,16 @@ def predict(input_data: PredictInput):
         input_data.Research,
     ]
 
-    prediction = admission_runner.predict.run([features])
+    # Prédiction
+    pred = runner.predict.run([features])
 
-    # Résolution du résultat (Future, WorkerResult, ndarray, list…)
-    if hasattr(prediction, "result"):
-        prediction = prediction.result()
+    if hasattr(pred, "result"):
+        pred = pred.result()
 
-    if hasattr(prediction, "tolist"):
-        prediction = prediction.tolist()
+    if hasattr(pred, "tolist"):
+        pred = pred.tolist()
 
-    while isinstance(prediction, list):
-        prediction = prediction[0]
+    while isinstance(pred, list):
+        pred = pred[0]
 
-    return {"chance_of_admit": float(prediction)}
+    return {"chance_of_admit": float(pred)}
