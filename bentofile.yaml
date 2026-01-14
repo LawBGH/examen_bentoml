@@ -5,11 +5,14 @@ labels:
   project: "admission_api"
 
 include:
-  - "src/service.py"
+  - "src/"
+  - "requirements.txt"
 
 python:
   packages:
     - bentoml==1.1.10
-    - numpy
     - scikit-learn
+    - numpy
+    - pandas
     - PyJWT
+

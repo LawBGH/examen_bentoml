@@ -7,9 +7,9 @@ sleep 5  # Attendre que le serveur démarre
 
 
 echo "=== LOGIN ==="
-TOKEN=$(curl -s -X POST http://localhost:3001/login \
+TOKEN=$(curl -s -X POST http://localhost:3000/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"LawrenceBENE","password":"BentoMlTop"}' | jq -r '.token')
+  -d '{"username":"LawrenceBENE","password":"BentoMlTop"}' | jq -r '.access_token')
 
 echo "Token reçu : $TOKEN"
 
@@ -19,7 +19,7 @@ if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
 fi
 
 echo "=== PREDICT ==="
-curl -X POST http://localhost:3001/predict \
+curl -X POST http://localhost:3000/predict \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{

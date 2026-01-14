@@ -1,8 +1,8 @@
 bentoml==1.1.10
 numpy
+pandas
 scikit-learn
 PyJWT
 starlette
 pydantic
-python3-pytest
 pytest

@@ -1,6 +1,50 @@
-.DS_Store
-.DS_Store?
-/venv
-/clean_data.csv
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
 venv311/
-/venv311
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# BentoML
+.bentoml/
+bentoml_models/
+bentoml.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
+.DS_Store?
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+.~*
+
+# Project specific
+/clean_data.csv
+admission_api.tar.gz
